@@ -126,13 +126,15 @@ HiprtAccel<Float, Spectrum>::ray_intersect_preliminary(
 
     UInt32 instance_id = UInt32::steal(out[4]);
     UInt32 geometry_id = UInt32::steal(out[6]);
+    UInt32 owner_instance_id = UInt32::steal(out[7]);
 
     UInt32 off      = dr::gather<UInt32>(geom_shape_offsets, instance_id, valid);
     UInt32 shape_id = dr::gather<UInt32>(geom_shape_table, off + geometry_id,
                                          valid);
     pi.shape = dr::reinterpret_array<ShapePtr, UInt32>(shape_id);
 
-    UInt32 owner_id = dr::gather<UInt32>(instance_owner_table, instance_id,
+    UInt32 owner_id = dr::gather<UInt32>(instance_owner_table,
+                                         owner_instance_id,
                                          valid);
     pi.instance = dr::reinterpret_array<ShapePtr, UInt32>(owner_id);
 

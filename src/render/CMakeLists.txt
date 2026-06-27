@@ -67,12 +67,17 @@ if (MI_ENABLE_METAL)
 endif()
 
 if (MI_ENABLE_AMD)
-  set(MI_HIPRT_ROOT "${PROJECT_SOURCE_DIR}/ext/hiprt" CACHE PATH
-      "Path to the HIPRT checkout used by the AMD backend.")
-  set(MI_HIPRT_LIBRARY
-      "${MI_HIPRT_ROOT}/dist/bin/Release/hiprt0300164.lib" CACHE FILEPATH
-      "Path to the HIPRT import library.")
-  include_directories("${MI_HIPRT_ROOT}")
+  if (NOT MI_HIPRT_ROOT)
+    set(MI_HIPRT_ROOT "${DRJIT_HIPRT_ROOT}" CACHE PATH
+        "Path to the HIPRT checkout used by the AMD backend.")
+  endif()
+  file(GLOB MI_HIPRT_LIBRARY
+    "${MI_HIPRT_ROOT}/dist/bin/Release/hiprt*64.lib")
+  if (NOT MI_HIPRT_LIBRARY)
+    message(FATAL_ERROR "Mitsuba: could not find HIPRT import library below "
+                        "${MI_HIPRT_ROOT}/dist/bin/Release")
+  endif()
+  list(GET MI_HIPRT_LIBRARY 0 MI_HIPRT_LIBRARY)
 
   set(LIBRENDER_EXTRA_SRC
     hiprt_accel.cpp hiprt/accel.h hiprt/shapes.h ${INC_DIR}/accel_hiprt.h
@@ -141,6 +146,7 @@ if (MI_ENABLE_METAL)
 endif()
 
 if (MI_ENABLE_AMD)
+  target_include_directories(mitsuba-render PRIVATE "${MI_HIPRT_ROOT}")
   target_link_libraries(mitsuba-render PUBLIC "${MI_HIPRT_LIBRARY}")
 endif()
 

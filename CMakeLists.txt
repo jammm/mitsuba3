@@ -113,7 +113,7 @@ if (NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/mitsuba.conf)
   if (APPLE)
     set(MI_DEFAULT_VARIANTS "scalar_rgb,scalar_spectral,metal_ad_rgb,llvm_ad_rgb,llvm_ad_spectral" CACHE STRING "Default Mitsuba variants that should be included if no mitsuba.conf file exists")
   else()
-    set(MI_DEFAULT_VARIANTS "scalar_rgb,scalar_spectral,amd_ad_rgb,cuda_ad_rgb,llvm_ad_rgb,llvm_ad_spectral" CACHE STRING "Default Mitsuba variants that should be included if no mitsuba.conf file exists")
+    set(MI_DEFAULT_VARIANTS "scalar_rgb,scalar_spectral,cuda_ad_rgb,llvm_ad_rgb,llvm_ad_spectral" CACHE STRING "Default Mitsuba variants that should be included if no mitsuba.conf file exists")
   endif()
   string(REPLACE "," ";" MI_DEFAULT_VARIANTS "${MI_DEFAULT_VARIANTS}")
   message(STATUS "MI_DEFAULT_VARIANTS: ${MI_DEFAULT_VARIANTS}")
@@ -557,32 +557,6 @@ if (MSVC AND MI_ENABLE_PYTHON)
         $<TARGET_FILE:${target}> ${COPY_TARGET_DESTINATION}
     )
   endforeach(target)
-
-  if (MI_ENABLE_AMD)
-    set(MI_AMD_RUNTIME_DLLS "")
-    file(GLOB MI_HIPRT_DLLS
-      "${MI_HIPRT_ROOT}/dist/bin/Release/hiprt*64.dll")
-    list(APPEND MI_AMD_RUNTIME_DLLS ${MI_HIPRT_DLLS})
-
-    if (DEFINED ENV{ROCM_HOME})
-      file(TO_CMAKE_PATH "$ENV{ROCM_HOME}" MI_ROCM_HOME)
-      file(GLOB MI_HIP_DLLS
-        "${MI_ROCM_HOME}/bin/amdhip64*.dll"
-        "${MI_ROCM_HOME}/bin/amd_comgr*.dll"
-        "${MI_ROCM_HOME}/bin/rocm_kpack*.dll"
-        "${MI_ROCM_HOME}/bin/hiprtc*.dll")
-      list(APPEND MI_AMD_RUNTIME_DLLS ${MI_HIP_DLLS})
-    endif()
-
-    foreach(dll ${MI_AMD_RUNTIME_DLLS})
-      get_filename_component(DLL_NAME "${dll}" NAME)
-      add_custom_command(
-        TARGET copy-targets POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-          "${dll}" "${MI_BINARY_DIR}/python/mitsuba/${DLL_NAME}"
-      )
-    endforeach()
-  endif()
 
   add_dependencies(copy-targets-python copy-targets)
 endif()
