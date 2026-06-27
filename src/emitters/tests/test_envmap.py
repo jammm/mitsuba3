@@ -7,7 +7,8 @@ import os
 
 
 def uses_hw_texture():
-    return dr.backend_v(mi.Float) in (dr.JitBackend.CUDA, dr.JitBackend.Metal)
+    return dr.backend_v(mi.Float) in (
+        dr.JitBackend.CUDA, dr.JitBackend.Metal, dr.JitBackend.AMD)
 
 
 @pytest.mark.parametrize("iteration", [0, 1, 2])

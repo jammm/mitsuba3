@@ -95,6 +95,8 @@ struct MI_EXPORT_LIB PhaseFunctionContext {
     }
 };
 
+MI_EXTERN_STRUCT(PhaseFunctionContext)
+
 /**
  * \brief Abstract phase function base-class.
  *

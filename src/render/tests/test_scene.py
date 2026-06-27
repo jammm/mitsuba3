@@ -69,7 +69,7 @@ def test02_shapes(variant_scalar_rgb):
 
 
 @fresolver_append_path
-def test03_shapes_parameters_grad_enabled(variant_cuda_ad_rgb):
+def test03_shapes_parameters_grad_enabled(variants_all_ad_rgb):
     scene = mi.load_dict({
         "type" : "scene",
         "box" :  {

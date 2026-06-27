@@ -6,6 +6,28 @@ get_directory_property(MI_EXT_COMPILE_OPTIONS        COMPILE_OPTIONS)
 get_directory_property(MI_EXT_COMPILE_OPTIONS_NOWARN COMPILE_OPTIONS)
 list(REMOVE_ITEM MI_EXT_COMPILE_OPTIONS_NOWARN -Wall -Wextra /W4)
 
+set(MI_EXT_CLANG_CL OFF)
+if (MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  set(MI_EXT_CLANG_CL ON)
+
+  set(MI_EXT_COMPILE_OPTIONS_CLANG_CL_NOWARN)
+  foreach (_mi_ext_option ${MI_EXT_COMPILE_OPTIONS})
+    set(_mi_ext_option_plain "${_mi_ext_option}")
+    if (_mi_ext_option_plain MATCHES "^\\$<\\$<COMPILE_LANGUAGE:CXX>:(.*)>$")
+      set(_mi_ext_option_plain "${CMAKE_MATCH_1}")
+    endif()
+
+    if (_mi_ext_option_plain MATCHES "^-W" OR
+        _mi_ext_option_plain MATCHES "^/W[0-4]$")
+      continue()
+    endif()
+
+    list(APPEND MI_EXT_COMPILE_OPTIONS_CLANG_CL_NOWARN "${_mi_ext_option}")
+  endforeach()
+  unset(_mi_ext_option)
+  unset(_mi_ext_option_plain)
+endif()
+
 # ---------------------------------------------------------------------------
 #  Enable assembler dialects
 # ---------------------------------------------------------------------------
@@ -152,6 +174,17 @@ if (MI_ENABLE_EMBREE)
   add_subdirectory(embree)
   set(CMAKE_CXX_VISIBILITY_PRESET "hidden")
   set(EMBREE_INCLUDE_DIRS "${CMAKE_CURRENT_SOURCE_DIR}/embree/include" PARENT_SCOPE)
+
+  if (MI_EXT_CLANG_CL)
+    # Embree's MSVC path uses preprocessor definitions for SSE4.2. clang-cl
+    # also needs the corresponding target feature enabled for SSE intrinsics.
+    foreach (_mi_embree_target lexers math simd sys tasking embree embree_sse42)
+      if (TARGET ${_mi_embree_target})
+        target_compile_options(${_mi_embree_target} PRIVATE -msse4.2)
+      endif()
+    endforeach()
+    unset(_mi_embree_target)
+  endif()
 
   if (MSVC)
     # Don't complain about ignored alignment specifier
@@ -353,7 +386,15 @@ set(TINYFORMAT_INCLUDE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}/tinyformat PARENT_SCOPE)
 #  struct-jit -- JIT-accelerated structure converter
 # ----------------------------------------------------------
 set(SJIT_ENABLE_PYTHON OFF CACHE BOOL "" FORCE)
+if (MI_EXT_CLANG_CL)
+  get_directory_property(_mi_ext_saved_compile_options COMPILE_OPTIONS)
+  set_directory_properties(PROPERTIES COMPILE_OPTIONS "${MI_EXT_COMPILE_OPTIONS_CLANG_CL_NOWARN}")
+endif()
 add_subdirectory(struct-jit)
+if (MI_EXT_CLANG_CL)
+  set_directory_properties(PROPERTIES COMPILE_OPTIONS "${_mi_ext_saved_compile_options}")
+  unset(_mi_ext_saved_compile_options)
+endif()
 set_property(TARGET struct-jit PROPERTY FOLDER "dependencies")
 
 # Tag struct-jit's snippet library as MASM (``.asm`` otherwise defaults to NASM).
@@ -362,6 +403,13 @@ if (MSVC)
     "${CMAKE_CURRENT_SOURCE_DIR}/struct-jit/asm/asm_x64_win.asm"
     TARGET_DIRECTORY struct-jit
     PROPERTIES LANGUAGE ASM_MASM)
+
+  if (MI_EXT_CLANG_CL)
+    set_source_files_properties(
+      "${CMAKE_CURRENT_SOURCE_DIR}/struct-jit/asm/asm_x64_win.asm"
+      TARGET_DIRECTORY struct-jit
+      PROPERTIES COMPILE_OPTIONS "")
+  endif()
 endif()
 
 mark_as_advanced(

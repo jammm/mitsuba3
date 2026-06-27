@@ -259,7 +259,8 @@ NB_MODULE(MI_VARIANT_NAME, m) {
     if (!is_stub_gen) {
         color_management_static_initialization(dr::is_cuda_v<Float>,
                                                dr::is_llvm_v<Float>,
-                                               dr::is_metal_v<Float>);
+                                               dr::is_metal_v<Float>,
+                                               dr::is_amd_v<Float>);
         Scene::static_accel_initialization();
     }
 }

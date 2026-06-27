@@ -50,6 +50,13 @@ static bool init_variant_backend(std::string_view variant) {
     }
 #endif
 
+#if defined(MI_ENABLE_AMD)
+    if (string::starts_with(variant, "amd_")) {
+        jit_init(1u << (uint32_t) JitBackend::AMD);
+        return jit_has_backend(JitBackend::AMD);
+    }
+#endif
+
     return false;
 }
 
@@ -93,7 +100,7 @@ Options:
     -o <filename>, --output <filename>
         Write the output image to the file "filename".
 
- === The following options are only relevant for JIT (CUDA/LLVM) modes ===
+ === The following options are only relevant for JIT (GPU/LLVM) modes ===
 
     -O [0-5]
         Enables successive optimizations (default: -O5):
@@ -233,7 +240,7 @@ int main(int argc, char *argv[]) {
 
         logger->set_log_level(log_level_mitsuba[std::min(log_level, 2)]);
 
-#if defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_METAL)
+#if defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_METAL) || defined(MI_ENABLE_AMD)
         ::LogLevel log_level_drjit[] = {
             ::LogLevel::Error,
             ::LogLevel::Warn,
@@ -283,9 +290,10 @@ int main(int argc, char *argv[]) {
         bool cuda  = string::starts_with(mode, "cuda_");
         bool llvm  = string::starts_with(mode, "llvm_");
         bool metal = string::starts_with(mode, "metal_");
-        bool jit   = cuda || llvm || metal;
+        bool amd   = string::starts_with(mode, "amd_");
+        bool jit   = cuda || llvm || metal || amd;
 
-#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL)
+#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL) || defined(MI_ENABLE_AMD)
         if (jit) {
             if (*arg_optim_lev) {
                 int lev = arg_optim_lev->as_int();
@@ -326,10 +334,10 @@ int main(int argc, char *argv[]) {
 
         if (!jit &&
             (*arg_optim_lev || *arg_wavefront || *arg_source || *arg_vec_width))
-            Throw("Specified an argument that only makes sense in a JIT (LLVM/CUDA/Metal) mode!");
+            Throw("Specified an argument that only makes sense in a JIT (LLVM/CUDA/Metal/AMD) mode!");
 
         Profiler::static_initialization();
-        color_management_static_initialization(cuda, llvm, metal);
+        color_management_static_initialization(cuda, llvm, metal, amd);
 
         MI_INVOKE_VARIANT(mode, scene_static_accel_initialization);
 
@@ -441,6 +449,11 @@ int main(int argc, char *argv[]) {
 
 #if defined(MI_ENABLE_METAL)
     if (string::starts_with(mode, "metal_"))
+        jit_shutdown();
+#endif
+
+#if defined(MI_ENABLE_AMD)
+    if (string::starts_with(mode, "amd_"))
         jit_shutdown();
 #endif
 

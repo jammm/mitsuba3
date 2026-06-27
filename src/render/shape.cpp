@@ -79,7 +79,7 @@ Shape<Float, Spectrum>::describe(ShapeIR &g) const {
     g.type = m_shape_type;
     g.prim_count = primitive_count();
     g.ctx = this;
-#if defined(MI_ENABLE_METAL) || defined(MI_ENABLE_CUDA)
+#if defined(MI_ENABLE_METAL) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_AMD)
     // Default custom shape: one AABB equal to the shape bounds.
     g.fill_aabbs = [](const void *ctx, void *out) {
         ScalarBoundingBox3f b = static_cast<const Shape *>(ctx)->bbox();

@@ -8,5 +8,6 @@ MI_VARIANT PhaseFunction<Float, Spectrum>::PhaseFunction(const Properties &props
     : JitObject<PhaseFunction>(props.id()), m_flags(+PhaseFunctionFlags::Empty) {
 }
 
+MI_INSTANTIATE_STRUCT(PhaseFunctionContext)
 MI_INSTANTIATE_CLASS(PhaseFunction)
 NAMESPACE_END(mitsuba)

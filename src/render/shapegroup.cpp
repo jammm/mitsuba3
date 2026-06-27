@@ -8,7 +8,8 @@ MI_VARIANT ShapeGroup<Float, Spectrum>::ShapeGroup(const Properties &props)
     // ID is now stored in base class JitObject
 
 #if !defined(MI_ENABLE_EMBREE)
-    if constexpr (!dr::is_cuda_v<Float> && !dr::is_metal_v<Float>)
+    if constexpr (!dr::is_cuda_v<Float> && !dr::is_metal_v<Float> &&
+                  !dr::is_amd_v<Float>)
         m_kdtree = new ShapeKDTree(props);
 #endif
     m_shape_types = 0;
@@ -31,12 +32,13 @@ MI_VARIANT ShapeGroup<Float, Spectrum>::ShapeGroup(const Properties &props)
             m_shapes.push_back(shape);
             shape->mark_as_instance();
 
-#if defined(MI_ENABLE_EMBREE) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL)
+#if defined(MI_ENABLE_EMBREE) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL) || defined(MI_ENABLE_AMD)
             m_bbox.expand(shape->bbox());
 #endif
 
 #if !defined(MI_ENABLE_EMBREE)
-            if constexpr (!dr::is_cuda_v<Float> && !dr::is_metal_v<Float>)
+            if constexpr (!dr::is_cuda_v<Float> && !dr::is_metal_v<Float> &&
+                          !dr::is_amd_v<Float>)
                 m_kdtree->add_shape(shape);
 #endif
             uint32_t type = shape->shape_type();
@@ -44,7 +46,8 @@ MI_VARIANT ShapeGroup<Float, Spectrum>::ShapeGroup(const Properties &props)
         }
     }
 #if !defined(MI_ENABLE_EMBREE)
-    if constexpr (!dr::is_cuda_v<Float> && !dr::is_metal_v<Float>) {
+    if constexpr (!dr::is_cuda_v<Float> && !dr::is_metal_v<Float> &&
+                  !dr::is_amd_v<Float>) {
         if (!m_kdtree->ready())
             m_kdtree->build();
 
@@ -52,8 +55,9 @@ MI_VARIANT ShapeGroup<Float, Spectrum>::ShapeGroup(const Properties &props)
     }
 #endif
 
-#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_METAL)
-    if constexpr (dr::is_llvm_v<Float> || dr::is_metal_v<Float>) {
+#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_METAL) || defined(MI_ENABLE_AMD)
+    if constexpr (dr::is_llvm_v<Float> || dr::is_metal_v<Float> ||
+                  dr::is_amd_v<Float>) {
         // Get shapes registry ids
         std::unique_ptr<uint32_t[]> data(new uint32_t[m_shapes.size()]);
         for (size_t i = 0; i < m_shapes.size(); i++)
@@ -114,11 +118,12 @@ ShapeGroup<Float, Spectrum>::compute_surface_interaction(const Ray3f &ray,
 
     ShapePtr shape = pi.shape;
 
-    // OptiX and Metal recover the hit child shape directly: ``pi.shape`` is set
-    // per-geometry (from the SBT record / the Metal geom_shape table), so it
+    // OptiX, Metal, and HIPRT recover the hit child shape directly: ``pi.shape`` is set
+    // per-geometry (from the SBT record / the GPU geom_shape table), so it
     // already names the actual child. The scalar and LLVM/Embree backends instead
     // resolve it from a within-group leaf index (``pi.shape_index``).
-    if constexpr (!dr::is_cuda_v<Float> && !dr::is_metal_v<Float>) {
+    if constexpr (!dr::is_cuda_v<Float> && !dr::is_metal_v<Float> &&
+                  !dr::is_amd_v<Float>) {
         if constexpr (!dr::is_array_v<Float>) {
             Assert(pi.shape_index < m_shapes.size());
             shape = m_shapes[pi.shape_index];
@@ -135,7 +140,8 @@ ShapeGroup<Float, Spectrum>::compute_surface_interaction(const Ray3f &ray,
 MI_VARIANT typename ShapeGroup<Float, Spectrum>::ScalarSize
 ShapeGroup<Float, Spectrum>::primitive_count() const {
 #if !defined(MI_ENABLE_EMBREE)
-    if constexpr (!dr::is_cuda_v<Float> && !dr::is_metal_v<Float>)
+    if constexpr (!dr::is_cuda_v<Float> && !dr::is_metal_v<Float> &&
+                  !dr::is_amd_v<Float>)
         return m_kdtree->primitive_count();
 #endif
 

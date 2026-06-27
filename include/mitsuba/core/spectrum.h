@@ -211,6 +211,9 @@ extern MI_EXPORT_LIB CIE1932Tables<dr::CUDAArray<float>> color_space_tables_cuda
 #if defined(MI_ENABLE_METAL)
 extern MI_EXPORT_LIB CIE1932Tables<dr::MetalArray<float>> color_space_tables_metal;
 #endif
+#if defined(MI_ENABLE_AMD)
+extern MI_EXPORT_LIB CIE1932Tables<dr::AMDArray<float>> color_space_tables_amd;
+#endif
 
 template <typename Float> auto get_color_space_tables() {
 #if defined(MI_ENABLE_LLVM)
@@ -228,12 +231,17 @@ template <typename Float> auto get_color_space_tables() {
         return color_space_tables_metal;
     else
 #endif
+#if defined(MI_ENABLE_AMD)
+    if constexpr (dr::is_amd_v<Float>)
+        return color_space_tables_amd;
+    else
+#endif
     return color_space_tables_scalar;
 }
 NAMESPACE_END(detail)
 
 /// Allocate arrays for the color space tables
-extern MI_EXPORT_LIB void color_management_static_initialization(bool cuda, bool llvm, bool metal = false);
+extern MI_EXPORT_LIB void color_management_static_initialization(bool cuda, bool llvm, bool metal = false, bool amd = false);
 extern MI_EXPORT_LIB void color_management_static_shutdown();
 
 /**

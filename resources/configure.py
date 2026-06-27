@@ -22,8 +22,8 @@ def variant_score(name):
     from the command line.'''
     score = 0
 
-    # Backend: GPU (CUDA/Metal) > parallel CPU (LLVM) > scalar
-    if name.startswith('cuda_') or name.startswith('metal_'):
+    # Backend: GPU (CUDA/Metal/AMD) > parallel CPU (LLVM) > scalar
+    if name.startswith('cuda_') or name.startswith('metal_') or name.startswith('amd_'):
         score += 4000
     elif name.startswith('llvm_'):
         score += 3000
@@ -72,7 +72,7 @@ def write_core_config_cpp(f, enabled):
     enable_jit = False
     enable_ad  = False
     for index, (name, float_, spectrum) in enumerate(enabled):
-        enable_jit |= ('cuda' in name) or ('llvm' in name) or ('metal' in name)
+        enable_jit |= ('cuda' in name) or ('llvm' in name) or ('metal' in name) or ('amd' in name)
         enable_ad  |= ('ad' in name)
     if enable_jit:
         f.write('#include <drjit/jit.h>\n')

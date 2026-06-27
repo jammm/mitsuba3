@@ -156,7 +156,7 @@ def test02_cornell_box_native(variants_vec_rgb, auto_opaque):
     ],
 )
 @pytest.mark.parametrize("auto_opaque", [False, True])
-def test02_pose_estimation(variants_vec_rgb, integrator, auto_opaque):
+def test02_pose_estimation(variants_all_ad_rgb, integrator, auto_opaque):
     """
     Tests that it is possible to optimize the pose of an object, when freezing
     the forward and backward pass. Gradients are propagated through the inputs
@@ -329,7 +329,7 @@ def test02b_cross_scene_rebind(variants_vec_rgb):
 
 
 @pytest.mark.parametrize("auto_opaque", [False, True])
-def test03_optimize_color(variants_vec_rgb, auto_opaque):
+def test03_optimize_color(variants_all_ad_rgb, auto_opaque):
     """
     Tests freezing of optimizing a color parameter through backpropagation, by
     passing the gradients through the frozen function inputs.
@@ -964,7 +964,7 @@ def test10_shape_sample_position(variants_vec_rgb, shape, auto_opaque):
 # TODO: add rmsprop
 @pytest.mark.parametrize("optimizer", ["sgd", "rmsprop", "adam"])
 @pytest.mark.parametrize("auto_opaque", [False, True])
-def test11_optimizer(variants_vec_rgb, optimizer, auto_opaque):
+def test11_optimizer(variants_all_ad_rgb, optimizer, auto_opaque):
     """
     Tests optimizing a non-geometric scene parameter using different optimizers
     in a frozen function. This also updates the parameters in the frozen function,

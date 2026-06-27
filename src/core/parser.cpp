@@ -1311,6 +1311,15 @@ void transform_resolve(const ParserConfig &/*config*/, ParserState &state) {
 }
 
 void transform_merge_equivalent(const ParserConfig &/*config*/, ParserState &state) {
+    auto has_opaque_identity_property = [](const Properties &props) {
+        for (const auto &prop : props) {
+            if (prop.type() == Properties::Type::Object ||
+                prop.type() == Properties::Type::Any)
+                return true;
+        }
+        return false;
+    };
+
     // Build a hash table mapping Properties to node indices
     struct NodeHasher {
         const ParserState *state;
@@ -1351,9 +1360,10 @@ void transform_merge_equivalent(const ParserConfig &/*config*/, ParserState &sta
         for (size_t i = 0; i < state.size(); ++i) {
             size_t repr = canonical[i];
 
-            // Skip merging for emitters and shapes
+            // Skip merging for identity-bearing nodes.
             if (state[repr].type == ObjectType::Emitter ||
-                state[repr].type == ObjectType::Shape)
+                state[repr].type == ObjectType::Shape ||
+                has_opaque_identity_property(state[repr].props))
                 continue;
 
             // Try to find an equivalent node
@@ -1466,9 +1476,11 @@ void transform_merge_meshes(const ParserConfig &/*config*/, ParserState &state) 
 
     Properties &root_props = state.root().props;
     std::vector<std::pair<std::string, size_t>> children;
-    for (const auto &prop : root_props.filter(Properties::Type::ResolvedReference))
-        children.emplace_back(std::string(prop.name()),
-                                prop.get<Properties::ResolvedReference>().index());
+    for (const auto &prop : root_props.filter(Properties::Type::ResolvedReference)) {
+        size_t idx = prop.get<Properties::ResolvedReference>().index();
+        if (state[idx].type == ObjectType::Shape)
+            children.emplace_back(std::string(prop.name()), idx);
+    }
 
     // If there are no references to move, we're done
     if (children.empty())
@@ -1483,8 +1495,14 @@ void transform_merge_meshes(const ParserConfig &/*config*/, ParserState &state) 
         merge_node.props.set(name, Properties::ResolvedReference(ref_idx), false);
         root_props.remove_property(name);
     }
-    // Use auto-generated argument name to avoid property validation issues
-    root_props.set("_arg_0", Properties::ResolvedReference(state.size()), false);
+    // Use an auto-generated argument name to avoid property validation issues.
+    std::string merge_name;
+    for (size_t i = 0;; ++i) {
+        merge_name = tfm::format("_arg_%zu", i);
+        if (!root_props.has_property(merge_name))
+            break;
+    }
+    root_props.set(merge_name, Properties::ResolvedReference(state.size()), false);
 
     state.nodes.push_back(std::move(merge_node));
 }
@@ -1608,7 +1626,7 @@ struct Scratch {
 // Set JIT scopes while instantating nodes
 struct ScopedSetJITScope {
     ScopedSetJITScope(uint32_t backend, uint32_t scope) : backend(backend), backup(0) {
-#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL)
+#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL) || defined(MI_ENABLE_AMD)
         if (backend) {
             backup = jit_scope((JitBackend) backend);
             jit_set_scope((JitBackend) backend, scope);
@@ -1617,7 +1635,7 @@ struct ScopedSetJITScope {
     }
 
     ~ScopedSetJITScope() {
-#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL)
+#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL) || defined(MI_ENABLE_AMD)
         if (backend)
             jit_set_scope((JitBackend) backend, backup);
 #endif
@@ -1660,13 +1678,15 @@ static Task* instantiate_node(const ParserConfig &config,
     uint32_t backend = 0, scope = 0;
 
     if (config.parallel) {
-#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL)
+#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL) || defined(MI_ENABLE_AMD)
         if (string::starts_with(config.variant, "cuda_"))
             backend = (uint32_t) JitBackend::CUDA;
         else if (string::starts_with(config.variant, "llvm_"))
             backend = (uint32_t) JitBackend::LLVM;
         else if (string::starts_with(config.variant, "metal_"))
             backend = (uint32_t) JitBackend::Metal;
+        else if (string::starts_with(config.variant, "amd_"))
+            backend = (uint32_t) JitBackend::AMD;
 
         if (backend) {
             jit_new_scope((JitBackend) backend);
@@ -1725,10 +1745,12 @@ static Task* instantiate_node(const ParserConfig &config,
         if (s.objects.empty())
             s.objects.push_back(obj);
 
-#if defined(MI_ENABLE_METAL)
-        // Commit this worker's per-thread command buffer so its buffer uploads
-        // are ordered (on the shared queue) ahead of later consuming kernels.
-        if (config.parallel && backend == (uint32_t) JitBackend::Metal)
+#if defined(MI_ENABLE_METAL) || defined(MI_ENABLE_AMD)
+        // Commit this worker's per-thread command buffer/stream so its buffer
+        // uploads are ordered ahead of later consuming kernels.
+        if (config.parallel &&
+            (backend == (uint32_t) JitBackend::Metal ||
+             backend == (uint32_t) JitBackend::AMD))
             jit_flush_thread();
 #endif
 
@@ -1787,7 +1809,7 @@ static Task* instantiate_node(const ParserConfig &config,
         // Instantiate the root
         instantiate();
 
-#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL)
+#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL) || defined(MI_ENABLE_AMD)
         if (backend && config.parallel)
             jit_new_scope((JitBackend) backend);
 #endif
@@ -1811,7 +1833,7 @@ std::vector<ref<Object>> instantiate(const ParserConfig &config, ParserState &st
     if (state.empty())
         Throw("No nodes to instantiate");
 
-#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL)
+#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL) || defined(MI_ENABLE_AMD)
     // Flush pending side effects here and now, to avoid potentially dirty
     // user-provided Dr.Jit arrays/tensor from being propagated to plugin
     // loaders running on a different thread. Side effects are queued in

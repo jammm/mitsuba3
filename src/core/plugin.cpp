@@ -264,11 +264,12 @@ ref<Object> PluginManager::create_object(const Properties &props,
               props.plugin_name(), plugin_type_name(actual_type),
               plugin_type_name(type));
 
-#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL)
+#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL) || defined(MI_ENABLE_AMD)
     // Ensures queued side effects are consistently compiled into cacheable kernels
     if (string::starts_with(variant, "cuda_") ||
         string::starts_with(variant, "llvm_") ||
-        string::starts_with(variant, "metal_"))
+        string::starts_with(variant, "metal_") ||
+        string::starts_with(variant, "amd_"))
         dr::eval();
 #endif
 

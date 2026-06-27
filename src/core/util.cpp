@@ -313,6 +313,10 @@ std::string info_features() {
     oss << " metal";
 #endif
 
+#if defined(MI_ENABLE_AMD)
+    oss << " amd";
+#endif
+
 #if defined(MI_ENABLE_LLVM)
     oss << " llvm";
 #endif

@@ -12,6 +12,7 @@ NAMESPACE_BEGIN(mitsuba)
 // Forward declarations so the non-selected branches of the trait are valid
 template <typename Float, typename Spectrum> struct OptixAccel;
 template <typename Float, typename Spectrum> struct MetalAccel;
+template <typename Float, typename Spectrum> struct HiprtAccel;
 template <typename Float, typename Spectrum> struct EmbreeAccel;
 template <typename Float, typename Spectrum> struct NativeAccel;
 
@@ -22,6 +23,9 @@ NAMESPACE_END(mitsuba)
 #endif
 #if defined(MI_ENABLE_METAL)
 #  include <mitsuba/render/accel_metal.h>
+#endif
+#if defined(MI_ENABLE_AMD)
+#  include <mitsuba/render/accel_hiprt.h>
 #endif
 #if defined(MI_ENABLE_EMBREE)
 #  include <mitsuba/render/accel_embree.h>
@@ -37,11 +41,13 @@ using SceneAccel = std::conditional_t<
     drjit::is_cuda_v<Float>, OptixAccel<Float, Spectrum>,
     std::conditional_t<
         drjit::is_metal_v<Float>, MetalAccel<Float, Spectrum>,
+        std::conditional_t<
+            drjit::is_amd_v<Float>, HiprtAccel<Float, Spectrum>,
 #if defined(MI_ENABLE_EMBREE)
-        EmbreeAccel<Float, Spectrum>
+            EmbreeAccel<Float, Spectrum>
 #else
-        NativeAccel<Float, Spectrum>
+            NativeAccel<Float, Spectrum>
 #endif
-        >>;
+            >>>;
 
 NAMESPACE_END(mitsuba)

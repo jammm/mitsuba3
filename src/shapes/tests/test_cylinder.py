@@ -162,7 +162,7 @@ def test05_differentiable_surface_interaction_ray_forward(variants_all_ad_rgb):
     assert dr.allclose(dr.grad(si.uv), [0, 1])
 
 
-def test06_differentiable_surface_interaction_ray_backward(variant_cuda_ad_rgb):
+def test06_differentiable_surface_interaction_ray_backward(variants_cuda_amd_ad_rgb):
     shape = mi.load_dict({'type' : 'cylinder'})
 
     ray = mi.Ray3f(mi.Vector3f(0.0, -10.0, 0.0), mi.Vector3f(0.0, 1.0, 0.0))

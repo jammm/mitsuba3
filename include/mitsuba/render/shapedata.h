@@ -8,7 +8,9 @@
 #if defined(__METAL_VERSION__)
     typedef float4 mi_float4;
     typedef uint   mi_uint;
-#elif defined(__CUDACC__) || defined(__CUDA_ARCH__)
+#elif defined(__CUDACC__) || defined(__CUDA_ARCH__) || \
+      defined(__HIPCC__) || defined(__HIP_DEVICE_COMPILE__) || \
+      defined(__HIPCC_RTC__)
     typedef float4       mi_float4;
     typedef unsigned int mi_uint;
 #else
@@ -57,9 +59,23 @@ struct alignas(16) EllipsoidData {
     mi_float4 to_object[3];
 };
 
+/// Per-primitive data for a round linear curve segment (world space).
+struct alignas(16) LinearCurveData {
+    /// Control points: xyz = position, w = radius.
+    mi_float4 p0, p1;
+};
+
+/// Per-primitive data for a round cubic B-spline curve segment (world space).
+struct alignas(16) BSplineCurveData {
+    /// Control points: xyz = position, w = radius.
+    mi_float4 p0, p1, p2, p3;
+};
+
 static_assert(sizeof(SphereData)    == 16, "SphereData layout");
 static_assert(sizeof(DiskData)      == 48, "DiskData layout");
 static_assert(sizeof(CylinderData)  == 64, "CylinderData layout");
 static_assert(sizeof(EllipsoidData) == 48, "EllipsoidData layout");
+static_assert(sizeof(LinearCurveData) == 32, "LinearCurveData layout");
+static_assert(sizeof(BSplineCurveData) == 64, "BSplineCurveData layout");
 
 } // namespace shapedata

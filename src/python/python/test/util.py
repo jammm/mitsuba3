@@ -91,7 +91,8 @@ def make_tmpfile(request, tmpdir_factory):
 
 
 def check_vectorization(kernel, arg_dims = [], width = 125, atol=1e-6,
-                        modes=['llvm', 'cuda', 'llvm_ad', 'cuda_ad']):
+                        modes=['llvm', 'cuda', 'metal', 'amd',
+                               'llvm_ad', 'cuda_ad', 'metal_ad', 'amd_ad']):
     """
     Helper routine which compares evaluations of the vectorized and
     non-vectorized version of a kernel using available variants (e.g. LLVM, CUDA).
@@ -116,10 +117,13 @@ def check_vectorization(kernel, arg_dims = [], width = 125, atol=1e-6,
 
     # Ensure scalar variant is enabled when calling this kernel
     assert mi.variant().startswith('scalar_')
+    scalar_variant = mi.variant()
 
     # List available variants with similar spectral variant
     spectral_variant = mi.variant().replace("scalar", "")
-    variants = list(set(mi.variants()) & set([m + spectral_variant for m in modes]))
+    available_variants = set(mi.variants())
+    variants = [m + spectral_variant for m in modes
+                if m + spectral_variant in available_variants]
 
     if not variants:
         pytest.skip(f"No vectorized variants available")
@@ -155,20 +159,23 @@ def check_vectorization(kernel, arg_dims = [], width = 125, atol=1e-6,
 
     results_scalar = [np.array(res) for res in results_scalar]
 
-    # Evaluate and compare vectorized kernel
-    for variant in variants:
-        # Set variant
-        mi.set_variant(variant)
-        types = [mi.Float, mi.Vector2f, mi.Vector3f]
+    try:
+        # Evaluate and compare vectorized kernel
+        for variant in variants:
+            # Set variant
+            mi.set_variant(variant)
+            types = [mi.Float, mi.Vector2f, mi.Vector3f]
 
-        # Cast arguments
-        args = [types[arg_dims[i]-1](np.transpose(args_np[i])) for i in range(len(args_np))]
+            # Cast arguments
+            args = [types[arg_dims[i]-1](np.transpose(args_np[i])) for i in range(len(args_np))]
 
-        # Evaluate vectorized kernel
-        results_vec = kernel(*args)
-        if not type(results_vec) in [list, tuple]:
-            results_vec = [results_vec]
+            # Evaluate vectorized kernel
+            results_vec = kernel(*args)
+            if not type(results_vec) in [list, tuple]:
+                results_vec = [results_vec]
 
-        # Compare results
-        for i in range(len(results_scalar)):
-            assert dr.allclose(results_vec[i], np.transpose(results_scalar[i]), atol=atol)
+            # Compare results
+            for i in range(len(results_scalar)):
+                assert dr.allclose(results_vec[i], np.transpose(results_scalar[i]), atol=atol)
+    finally:
+        mi.set_variant(scalar_variant)

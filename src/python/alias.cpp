@@ -50,7 +50,7 @@ nb::object variant_change_callbacks;
 
 
 nb::object import_with_deepbind_if_necessary(const char* name) {
-#if defined(__clang__) && !defined(__APPLE__)
+#if defined(__clang__) && defined(__linux__)
     nb::int_ backupflags;
     nb::object sys = nb::module_::import_("sys");
     if (!std::getenv("DRJIT_NO_RTLD_DEEPBIND")) {
@@ -66,7 +66,7 @@ nb::object import_with_deepbind_if_necessary(const char* name) {
 
     nb::object out = nb::module_::import_(name);
 
-#if defined(__clang__) && !defined(__APPLE__)
+#if defined(__clang__) && defined(__linux__)
     if (!std::getenv("DRJIT_NO_RTLD_DEEPBIND"))
         sys.attr("setdlopenflags")(backupflags);
 #endif
@@ -161,7 +161,7 @@ static void set_variant(nb::args args) {
 
     if (!curr_variant.equal(old_variant)) {
         // Reload internal plugins
-        if (curr_variant.attr("startswith")(nb::make_tuple("llvm_", "cuda_", "metal_"))) {
+        if (curr_variant.attr("startswith")(nb::make_tuple("llvm_", "cuda_", "metal_", "amd_"))) {
             nb::module_ mi_python = nb::module_::import_("mitsuba.python.ad.integrators");
             nb::steal(PyImport_ReloadModule(mi_python.ptr()));
             mi_python = nb::module_::import_("mitsuba.python.ad.loaders");

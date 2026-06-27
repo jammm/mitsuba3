@@ -113,7 +113,7 @@ if (NOT EXISTS ${CMAKE_CURRENT_BINARY_DIR}/mitsuba.conf)
   if (APPLE)
     set(MI_DEFAULT_VARIANTS "scalar_rgb,scalar_spectral,metal_ad_rgb,llvm_ad_rgb,llvm_ad_spectral" CACHE STRING "Default Mitsuba variants that should be included if no mitsuba.conf file exists")
   else()
-    set(MI_DEFAULT_VARIANTS "scalar_rgb,scalar_spectral,cuda_ad_rgb,llvm_ad_rgb,llvm_ad_spectral" CACHE STRING "Default Mitsuba variants that should be included if no mitsuba.conf file exists")
+    set(MI_DEFAULT_VARIANTS "scalar_rgb,scalar_spectral,amd_ad_rgb,cuda_ad_rgb,llvm_ad_rgb,llvm_ad_spectral" CACHE STRING "Default Mitsuba variants that should be included if no mitsuba.conf file exists")
   endif()
   string(REPLACE "," ";" MI_DEFAULT_VARIANTS "${MI_DEFAULT_VARIANTS}")
   message(STATUS "MI_DEFAULT_VARIANTS: ${MI_DEFAULT_VARIANTS}")
@@ -182,7 +182,11 @@ if (MI_VARIANTS MATCHES "metal_")
   set(MI_ENABLE_METAL ON)
 endif()
 
-if (MI_ENABLE_LLVM OR MI_ENABLE_CUDA OR MI_ENABLE_METAL)
+if (MI_VARIANTS MATCHES "amd_")
+  set(MI_ENABLE_AMD ON)
+endif()
+
+if (MI_ENABLE_LLVM OR MI_ENABLE_CUDA OR MI_ENABLE_METAL OR MI_ENABLE_AMD)
   set(MI_ENABLE_JIT ON)
 endif()
 
@@ -299,6 +303,14 @@ endif()
 set(CMAKE_INSTALL_RPATH "${MI_ORIGIN};${MI_ORIGIN}/../drjit")
 
 # Build the dependencies
+if (MI_ENABLE_AMD)
+  set(DRJIT_ENABLE_AMD ON CACHE BOOL "Build the Dr.Jit AMD/HIP backend?" FORCE)
+  if (NOT DRJIT_HIPRT_ROOT)
+    set(DRJIT_HIPRT_ROOT "${PROJECT_SOURCE_DIR}/ext/hiprt" CACHE PATH
+        "Path to the HIPRT source/include root" FORCE)
+  endif()
+endif()
+
 add_subdirectory(ext)
 
 # Always add the include directories for tinyformat, nanobind, Dr.Jit and Eigen
@@ -320,6 +332,11 @@ endif()
 if (MI_ENABLE_METAL)
   message(STATUS "Mitsuba: using Metal for GPU ray tracing.")
   add_definitions(-DMI_ENABLE_METAL=1)
+endif()
+
+if (MI_ENABLE_AMD)
+  message(STATUS "Mitsuba: using HIPRT for AMD GPU ray tracing.")
+  add_definitions(-DMI_ENABLE_AMD=1)
 endif()
 
 if (MI_ENABLE_EMBREE)
@@ -540,6 +557,32 @@ if (MSVC AND MI_ENABLE_PYTHON)
         $<TARGET_FILE:${target}> ${COPY_TARGET_DESTINATION}
     )
   endforeach(target)
+
+  if (MI_ENABLE_AMD)
+    set(MI_AMD_RUNTIME_DLLS "")
+    file(GLOB MI_HIPRT_DLLS
+      "${MI_HIPRT_ROOT}/dist/bin/Release/hiprt*64.dll")
+    list(APPEND MI_AMD_RUNTIME_DLLS ${MI_HIPRT_DLLS})
+
+    if (DEFINED ENV{ROCM_HOME})
+      file(TO_CMAKE_PATH "$ENV{ROCM_HOME}" MI_ROCM_HOME)
+      file(GLOB MI_HIP_DLLS
+        "${MI_ROCM_HOME}/bin/amdhip64*.dll"
+        "${MI_ROCM_HOME}/bin/amd_comgr*.dll"
+        "${MI_ROCM_HOME}/bin/rocm_kpack*.dll"
+        "${MI_ROCM_HOME}/bin/hiprtc*.dll")
+      list(APPEND MI_AMD_RUNTIME_DLLS ${MI_HIP_DLLS})
+    endif()
+
+    foreach(dll ${MI_AMD_RUNTIME_DLLS})
+      get_filename_component(DLL_NAME "${dll}" NAME)
+      add_custom_command(
+        TARGET copy-targets POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+          "${dll}" "${MI_BINARY_DIR}/python/mitsuba/${DLL_NAME}"
+      )
+    endforeach()
+  endif()
 
   add_dependencies(copy-targets-python copy-targets)
 endif()

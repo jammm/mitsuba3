@@ -66,6 +66,20 @@ if (MI_ENABLE_METAL)
     PROPERTIES COMPILE_FLAGS "-fobjc-arc")
 endif()
 
+if (MI_ENABLE_AMD)
+  set(MI_HIPRT_ROOT "${PROJECT_SOURCE_DIR}/ext/hiprt" CACHE PATH
+      "Path to the HIPRT checkout used by the AMD backend.")
+  set(MI_HIPRT_LIBRARY
+      "${MI_HIPRT_ROOT}/dist/bin/Release/hiprt0300164.lib" CACHE FILEPATH
+      "Path to the HIPRT import library.")
+  include_directories("${MI_HIPRT_ROOT}")
+
+  set(LIBRENDER_EXTRA_SRC
+    hiprt_accel.cpp hiprt/accel.h hiprt/shapes.h ${INC_DIR}/accel_hiprt.h
+    ${LIBRENDER_EXTRA_SRC}
+  )
+endif()
+
 add_library(mitsuba-render OBJECT
   ${INC_DIR}/fwd.h
   ${INC_DIR}/ior.h
@@ -124,6 +138,10 @@ target_link_libraries(mitsuba-render PUBLIC struct-jit)
 
 if (MI_ENABLE_METAL)
   target_link_libraries(mitsuba-render PRIVATE "-framework Metal" "-framework Foundation")
+endif()
+
+if (MI_ENABLE_AMD)
+  target_link_libraries(mitsuba-render PUBLIC "${MI_HIPRT_LIBRARY}")
 endif()
 
 if (MI_ENABLE_JIT)

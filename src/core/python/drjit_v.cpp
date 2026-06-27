@@ -53,6 +53,8 @@ MI_PY_EXPORT(DrJit) {
         backend = "llvm";
     else if constexpr (dr::is_metal_v<Float>)
         backend = "metal";
+    else if constexpr (dr::is_amd_v<Float>)
+        backend = "amd";
 
     nb::module_ drjit         = nb::module_::import_("drjit"),
                 drjit_variant = drjit.attr(backend),

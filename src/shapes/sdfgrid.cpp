@@ -27,6 +27,10 @@
 #  include "../render/metal/shapes.h"
 #endif
 
+#if defined(MI_ENABLE_AMD)
+#  include <mitsuba/render/shapedata.h>
+#endif
+
 NAMESPACE_BEGIN(mitsuba)
 
 /**!
@@ -549,7 +553,7 @@ public:
         return dr::grad_enabled(m_to_world);
     }
 
-#if defined(MI_ENABLE_METAL)
+#if defined(MI_ENABLE_METAL) || defined(MI_ENABLE_AMD)
     // Layout of the buffer bound at MSL [[buffer(4)]] for SDFGrid:
     //   header (80 bytes): res(3)+n_voxels(1) ints, voxel_size(3)+pad floats,
     //                      to_object affine (3 rows of float4)
@@ -570,8 +574,8 @@ public:
     // record (pointers + resolution + affine) referencing the existing arrays.
     void describe(ShapeIR &g) const override {
         Base::describe(g);
-#if defined(MI_ENABLE_METAL)
-        if constexpr (dr::is_metal_v<Float>) {
+#if defined(MI_ENABLE_METAL) || defined(MI_ENABLE_AMD)
+        if constexpr (dr::is_metal_v<Float> || dr::is_amd_v<Float>) {
             auto shape = m_grid_texture.tensor().shape();
             size_t grid_count = shape[0] * shape[1] * shape[2];
             g.data_size =
@@ -611,20 +615,25 @@ public:
 #endif
     }
 
-#if defined(MI_ENABLE_METAL)
+#if defined(MI_ENABLE_METAL) || defined(MI_ENABLE_AMD)
     void gpu_fill_aabbs(void *out) const {
         if constexpr (dr::is_metal_v<Float>) {
             // m_jit_bboxes holds 6 floats per AABB; stream it straight into the
             // host-visible shared Metal buffer ``out`` (data() evaluates first).
             jit_memcpy(JitBackend::Metal, out, m_jit_bboxes.data(),
                        6 * (size_t) m_filled_voxel_count * sizeof(float));
+        } else if constexpr (dr::is_amd_v<Float>) {
+            size_t bytes = 6 * (size_t) m_filled_voxel_count * sizeof(float);
+            auto bboxes = dr::migrate(m_jit_bboxes, JitBackend::None);
+            dr::sync_thread();
+            std::memcpy(out, bboxes.data(), bytes);
         } else {
             (void) out;
         }
     }
 
     void gpu_fill_data(void *out) const {
-        if constexpr (dr::is_metal_v<Float>) {
+        if constexpr (dr::is_metal_v<Float> || dr::is_amd_v<Float>) {
             auto shape = m_grid_texture.tensor().shape();
             size_t res_x = shape[2], res_y = shape[1], res_z = shape[0];
             size_t grid_count = res_x * res_y * res_z;

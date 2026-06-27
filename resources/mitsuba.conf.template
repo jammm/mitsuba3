@@ -399,6 +399,68 @@
         "spectrum": "MuellerMatrix<Spectrum<Float, 4>>"
     },
 
+    # AMD/HIP variant definitions
+
+    "amd_mono": {
+        "float": "dr::AMDArray<float>",
+        "spectrum": "Color<Float, 1>"
+    },
+
+    "amd_mono_polarized": {
+        "float": "dr::AMDArray<float>",
+        "spectrum": "MuellerMatrix<Color<Float, 1>>"
+    },
+
+    "amd_rgb": {
+        "float": "dr::AMDArray<float>",
+        "spectrum": "Color<Float, 3>"
+    },
+
+    "amd_rgb_polarized": {
+        "float": "dr::AMDArray<float>",
+        "spectrum": "MuellerMatrix<Color<Float, 3>>"
+    },
+
+    "amd_spectral": {
+        "float": "dr::AMDArray<float>",
+        "spectrum": "Spectrum<Float, 4>"
+    },
+
+    "amd_spectral_polarized": {
+        "float": "dr::AMDArray<float>",
+        "spectrum": "MuellerMatrix<Spectrum<Float, 4>>"
+    },
+
+    "amd_ad_mono": {
+        "float": "dr::DiffArray<JitBackend::AMD, float>",
+        "spectrum": "Color<Float, 1>"
+    },
+
+    "amd_ad_mono_polarized": {
+        "float": "dr::DiffArray<JitBackend::AMD, float>",
+        "spectrum": "MuellerMatrix<Color<Float, 1>>"
+    },
+
+    "amd_ad_rgb": {
+        "float": "dr::DiffArray<JitBackend::AMD, float>",
+        "spectrum": "Color<Float, 3>"
+    },
+
+    "amd_ad_rgb_polarized": {
+        "float": "dr::DiffArray<JitBackend::AMD, float>",
+        "spectrum": "MuellerMatrix<Color<Float, 3>>"
+    },
+
+    "amd_ad_spectral": {
+        "float": "dr::DiffArray<JitBackend::AMD, float>",
+        "spectrum": "Spectrum<Float, 4>"
+    },
+
+    "amd_ad_spectral_polarized": {
+        "float": "dr::DiffArray<JitBackend::AMD, float>",
+        "spectrum": "MuellerMatrix<Spectrum<Float, 4>>"
+    },
+
     # Metal variant definitions
 
     "metal_mono": {

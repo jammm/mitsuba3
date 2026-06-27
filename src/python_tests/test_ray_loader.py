@@ -507,7 +507,7 @@ def test_ray_loader_render_spp_gt_one(variants_vec_backends_once_rgb):
     assert rendered.shape == (1, 8, 3)
 
 
-def test_ray_loader_with_rendering_optimization(variants_vec_backends_once_rgb):
+def test_ray_loader_with_rendering_optimization(variants_vec_ad_backends_once_rgb):
     """Test RayDataLoader with actual rendering and optimization.
 
     This test demonstrates the typical usage pattern for RayDataLoader in an

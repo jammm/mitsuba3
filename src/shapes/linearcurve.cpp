@@ -22,6 +22,10 @@
 #include "../render/metal/shapes.h"
 #endif
 
+#if defined(MI_ENABLE_AMD)
+#include <mitsuba/render/shapedata.h>
+#endif
+
 #include "../render/bbox_reduce.h"
 
 NAMESPACE_BEGIN(mitsuba)
@@ -399,6 +403,65 @@ public:
         return dr::grad_enabled(m_control_points);
     }
 
+#if defined(MI_ENABLE_AMD)
+    void gpu_fill_aabbs(void *out) const {
+        if constexpr (dr::is_amd_v<Float>) {
+            auto cps = dr::migrate(m_control_points, JitBackend::None);
+            auto indices = dr::migrate(m_indices, JitBackend::None);
+            dr::sync_thread();
+
+            const float *cp = cps.data();
+            const uint32_t *idx = indices.data();
+            float *dst = (float *) out;
+            size_t count = (size_t) dr::width(m_indices);
+
+            auto min2 = [](float a, float b) { return a < b ? a : b; };
+            auto max2 = [](float a, float b) { return a > b ? a : b; };
+
+            for (size_t i = 0; i < count; ++i) {
+                const float *p0 = cp + 4 * (size_t) idx[i];
+                const float *p1 = p0 + 4;
+                float r0 = p0[3], r1 = p1[3];
+
+                dst[6 * i + 0] = min2(p0[0] - r0, p1[0] - r1);
+                dst[6 * i + 1] = min2(p0[1] - r0, p1[1] - r1);
+                dst[6 * i + 2] = min2(p0[2] - r0, p1[2] - r1);
+                dst[6 * i + 3] = max2(p0[0] + r0, p1[0] + r1);
+                dst[6 * i + 4] = max2(p0[1] + r0, p1[1] + r1);
+                dst[6 * i + 5] = max2(p0[2] + r0, p1[2] + r1);
+            }
+        } else {
+            (void) out;
+        }
+    }
+
+    void gpu_fill_data(void *out) const {
+        if constexpr (dr::is_amd_v<Float>) {
+            auto cps = dr::migrate(m_control_points, JitBackend::None);
+            auto indices = dr::migrate(m_indices, JitBackend::None);
+            dr::sync_thread();
+
+            const float *cp = cps.data();
+            const uint32_t *idx = indices.data();
+            auto *dst = (shapedata::LinearCurveData *) out;
+            size_t count = (size_t) dr::width(m_indices);
+
+            auto cp4 = [&](uint32_t i) {
+                const float *p = cp + 4 * (size_t) i;
+                return mi_float4 { p[0], p[1], p[2], p[3] };
+            };
+
+            for (size_t i = 0; i < count; ++i) {
+                uint32_t base = idx[i];
+                dst[i].p0 = cp4(base);
+                dst[i].p1 = cp4(base + 1);
+            }
+        } else {
+            (void) out;
+        }
+    }
+#endif
+
     void describe(ShapeIR &g) const override {
         Base::describe(g);
         g.kind = ShapeIR::Kind::LinearCurve;
@@ -406,6 +469,18 @@ public:
         g.seg_count = (size_t) dr::width(m_indices);
         g.cp_ptr  = m_control_points.data();
         g.seg_ptr = m_indices.data();
+#if defined(MI_ENABLE_AMD)
+        if constexpr (dr::is_amd_v<Float>) {
+            g.prim_count = g.seg_count;
+            g.pdata_size = sizeof(shapedata::LinearCurveData);
+            g.fill_aabbs = [](const void *ctx, void *out) {
+                static_cast<const LinearCurve *>(ctx)->gpu_fill_aabbs(out);
+            };
+            g.fill_data = [](const void *ctx, void *out) {
+                static_cast<const LinearCurve *>(ctx)->gpu_fill_data(out);
+            };
+        }
+#endif
     }
 
     ScalarBoundingBox3f bbox() const override {

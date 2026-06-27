@@ -64,7 +64,7 @@ private:
     ScalarBoundingBox3f m_bbox;
     std::vector<ref<Base>> m_shapes;
 
-#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL)
+#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL) || defined(MI_ENABLE_AMD)
     DynamicBuffer<UInt32> m_shapes_registry_ids;
 #endif
 
@@ -80,7 +80,7 @@ private:
     mutable bool m_parameters_grad_enabled_cache = false;
     mutable bool m_parameters_grad_enabled_dirty = true;
 
-#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL)
+#if defined(MI_ENABLE_LLVM) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_METAL) || defined(MI_ENABLE_AMD)
     MI_DECLARE_TRAVERSE_CB(m_shapes, m_shapes_registry_ids, m_accel_handles)
 #else
     MI_DECLARE_TRAVERSE_CB(m_shapes, m_accel_handles)

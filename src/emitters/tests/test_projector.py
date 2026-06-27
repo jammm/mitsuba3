@@ -6,7 +6,8 @@ from mitsuba.scalar_rgb.test.util import fresolver_append_path
 
 
 def uses_hw_texture():
-    return dr.backend_v(mi.Float) in (dr.JitBackend.CUDA, dr.JitBackend.Metal)
+    return dr.backend_v(mi.Float) in (
+        dr.JitBackend.CUDA, dr.JitBackend.Metal, dr.JitBackend.AMD)
 
 
 @fresolver_append_path

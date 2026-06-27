@@ -15,7 +15,7 @@
     #include "optix/cylinder.cuh"
 #endif
 
-#if defined(MI_ENABLE_METAL) || defined(MI_ENABLE_CUDA)
+#if defined(MI_ENABLE_METAL) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_AMD)
     #include <mitsuba/render/shapedata.h>
 #endif
 
@@ -767,7 +767,7 @@ public:
         return si;
     }
 
-#if defined(MI_ENABLE_METAL) || defined(MI_ENABLE_CUDA)
+#if defined(MI_ENABLE_METAL) || defined(MI_ENABLE_CUDA) || defined(MI_ENABLE_AMD)
     void gpu_fill_data(void *out) const {
         shapedata::CylinderData &d = *(shapedata::CylinderData *) out;
         shapedata::fill_affine3x4(m_to_world.scalar().inverse().matrix,

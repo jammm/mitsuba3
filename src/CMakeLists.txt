@@ -13,6 +13,20 @@ target_link_libraries(mitsuba PUBLIC mitsuba-core)
 target_link_libraries(mitsuba PUBLIC mitsuba-render)
 set_target_properties(mitsuba PROPERTIES INTERPROCEDURAL_OPTIMIZATION ON)
 
+if (MSVC AND CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  set(MI_CLANGRT_BUILTINS "")
+  if (DEFINED ENV{ROCM_HOME})
+    file(TO_CMAKE_PATH "$ENV{ROCM_HOME}" MI_ROCM_HOME)
+    file(GLOB MI_CLANGRT_BUILTINS
+      "${MI_ROCM_HOME}/lib/llvm/lib/clang/*/lib/windows/clang_rt.builtins-x86_64.lib")
+  endif()
+
+  if (MI_CLANGRT_BUILTINS)
+    list(GET MI_CLANGRT_BUILTINS 0 MI_CLANGRT_BUILTINS_LIB)
+    target_link_libraries(mitsuba PRIVATE "${MI_CLANGRT_BUILTINS_LIB}")
+  endif()
+endif()
+
 if (CMAKE_CXX_COMPILER_ID MATCHES "^(GNU)$")
   # Treat undefined symbols as errors when linking
   target_link_libraries(mitsuba PRIVATE -Wl,--no-undefined)

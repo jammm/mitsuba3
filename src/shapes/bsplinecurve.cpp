@@ -23,6 +23,10 @@
 #include "../render/metal/shapes.h"
 #endif
 
+#if defined(MI_ENABLE_AMD)
+#include <mitsuba/render/shapedata.h>
+#endif
+
 #include "../render/bbox_reduce.h"
 
 NAMESPACE_BEGIN(mitsuba)
@@ -1029,6 +1033,91 @@ public:
     //! @}
     // =============================================================
 
+#if defined(MI_ENABLE_AMD)
+    void gpu_fill_aabbs(void *out) const {
+        if constexpr (dr::is_amd_v<Float>) {
+            auto cps = dr::migrate(m_control_points, JitBackend::None);
+            auto indices = dr::migrate(m_indices, JitBackend::None);
+            dr::sync_thread();
+
+            const float *cp = cps.data();
+            const uint32_t *idx = indices.data();
+            float *dst = (float *) out;
+            size_t count = (size_t) dr::width(m_indices);
+
+            auto min2 = [](float a, float b) { return a < b ? a : b; };
+            auto max2 = [](float a, float b) { return a > b ? a : b; };
+
+            for (size_t i = 0; i < count; ++i) {
+                const float *p[4] = {
+                    cp + 4 * ((size_t) idx[i] + 0),
+                    cp + 4 * ((size_t) idx[i] + 1),
+                    cp + 4 * ((size_t) idx[i] + 2),
+                    cp + 4 * ((size_t) idx[i] + 3)
+                };
+
+                float mn[3] = {
+                    p[0][0] - p[0][3],
+                    p[0][1] - p[0][3],
+                    p[0][2] - p[0][3]
+                };
+                float mx[3] = {
+                    p[0][0] + p[0][3],
+                    p[0][1] + p[0][3],
+                    p[0][2] + p[0][3]
+                };
+
+                for (int j = 1; j < 4; ++j) {
+                    float r = p[j][3];
+                    mn[0] = min2(mn[0], p[j][0] - r);
+                    mn[1] = min2(mn[1], p[j][1] - r);
+                    mn[2] = min2(mn[2], p[j][2] - r);
+                    mx[0] = max2(mx[0], p[j][0] + r);
+                    mx[1] = max2(mx[1], p[j][1] + r);
+                    mx[2] = max2(mx[2], p[j][2] + r);
+                }
+
+                dst[6 * i + 0] = mn[0];
+                dst[6 * i + 1] = mn[1];
+                dst[6 * i + 2] = mn[2];
+                dst[6 * i + 3] = mx[0];
+                dst[6 * i + 4] = mx[1];
+                dst[6 * i + 5] = mx[2];
+            }
+        } else {
+            (void) out;
+        }
+    }
+
+    void gpu_fill_data(void *out) const {
+        if constexpr (dr::is_amd_v<Float>) {
+            auto cps = dr::migrate(m_control_points, JitBackend::None);
+            auto indices = dr::migrate(m_indices, JitBackend::None);
+            dr::sync_thread();
+
+            const float *cp = cps.data();
+            const uint32_t *idx = indices.data();
+            auto *dst = (shapedata::BSplineCurveData *) out;
+            size_t count = (size_t) dr::width(m_indices);
+
+            auto cp4 = [&](uint32_t i) {
+                const float *p = cp + 4 * (size_t) i;
+                return mi_float4 { p[0], p[1], p[2], p[3] };
+            };
+
+            for (size_t i = 0; i < count; ++i) {
+                uint32_t base = idx[i];
+                dst[i].p0 = cp4(base);
+                dst[i].p1 = cp4(base + 1);
+                dst[i].p2 = cp4(base + 2);
+                dst[i].p3 = cp4(base + 3);
+            }
+        } else {
+            (void) out;
+        }
+    }
+#endif
+
     void describe(ShapeIR &g) const override {
         Base::describe(g);
         g.kind = ShapeIR::Kind::BSplineCurve;
@@ -1036,6 +1125,18 @@ public:
         g.seg_count = (size_t) dr::width(m_indices);
         g.cp_ptr  = m_control_points.data();
         g.seg_ptr = m_indices.data();
+#if defined(MI_ENABLE_AMD)
+        if constexpr (dr::is_amd_v<Float>) {
+            g.prim_count = g.seg_count;
+            g.pdata_size = sizeof(shapedata::BSplineCurveData);
+            g.fill_aabbs = [](const void *ctx, void *out) {
+                static_cast<const BSplineCurve *>(ctx)->gpu_fill_aabbs(out);
+            };
+            g.fill_data = [](const void *ctx, void *out) {
+                static_cast<const BSplineCurve *>(ctx)->gpu_fill_data(out);
+            };
+        }
+#endif
     }
 
     ScalarBoundingBox3f bbox() const override {

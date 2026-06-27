@@ -395,13 +395,20 @@ MI_PY_EXPORT(Bitmap) {
         });
 
     /**
-     * Python only constructor for any CPU array type
+     * Python only constructor for Dr.Jit tensor types
      */
     bitmap.def(
         "__init__",
-        [](Bitmap *b, ContigCpuNdArray data,
-           nb::object pixel_format_,
+        [](Bitmap *b, nb::object h, nb::object pixel_format_,
            const std::vector<std::string> &channel_names) {
+            nb::object is_tensor_v =
+                nb::module_::import_("drjit").attr("is_tensor_v");
+
+            if (!nb::cast<bool>(is_tensor_v(h)))
+                throw nb::next_overload();
+
+            // Use Numpy conversion to get migration to the CPU
+            ContigCpuNdArray data = nb::cast<ContigCpuNdArray>(h.attr("numpy")());
             from_cpu_dlpack(b, data, pixel_format_, channel_names);
         },
         "array"_a, "pixel_format"_a = nb::none(),
@@ -410,21 +417,13 @@ MI_PY_EXPORT(Bitmap) {
         "DLPack protocol.");
 
     /**
-     * Python only constructor for Dr.Jit tensor types
+     * Python only constructor for any CPU array type
      */
     bitmap.def(
         "__init__",
-        [](Bitmap *b, nb::handle_t<dr::ArrayBase> h, nb::object pixel_format_,
+        [](Bitmap *b, ContigCpuNdArray data,
+           nb::object pixel_format_,
            const std::vector<std::string> &channel_names) {
-            nb::handle type = h.type();
-            dr::ArrayMeta m = nb::type_supplement<dr::ArraySupplement>(type);
-
-            if (!m.is_tensor)
-                throw nb::type_error("This constructor is only supported with "
-                                     "Dr.Jit Tensor types!");
-
-            // Use Numpy conversion to get migration to the CPU
-            ContigCpuNdArray data = nb::cast<ContigCpuNdArray>(h.attr("numpy")());
             from_cpu_dlpack(b, data, pixel_format_, channel_names);
         },
         "array"_a, "pixel_format"_a = nb::none(),

@@ -32,24 +32,74 @@ class SolveCholesky(dr.CustomOp):
     DrJIT custom operator to solve a linear system using a Cholesky factorization.
     """
 
+    def solve(self, u):
+        x = dr.empty(mi.TensorXf, shape=u.shape)
+        result = self.solver.solve(u, x)
+        return x if result is None else result
+
     def eval(self, solver, u):
         self.solver = solver
-        x = dr.empty(mi.TensorXf, shape=u.shape)
-        solver.solve(u, x)
-        return mi.TensorXf(x)
+        return mi.TensorXf(self.solve(u))
 
     def forward(self):
-        x = dr.empty(mi.TensorXf, shape=self.grad_in('u').shape)
-        self.solver.solve(self.grad_in('u'), x)
-        self.set_grad_out(x)
+        self.set_grad_out(self.solve(self.grad_in('u')))
 
     def backward(self):
-        x = dr.empty(mi.TensorXf, shape=self.grad_out().shape)
-        self.solver.solve(self.grad_out(), x)
-        self.set_grad_in('u', x)
+        self.set_grad_in('u', self.solve(self.grad_out()))
 
     def name(self):
         return "Cholesky solve"
+
+
+class AMDConjugateGradientSolver:
+    """
+    GPU-side iterative solver used when cholespy cannot consume AMD Dr.Jit
+    arrays. The system is symmetric positive definite by construction.
+    """
+
+    def __init__(self, n_verts, rows, cols, data, matrix_type):
+        from cholespy import MatrixType
+
+        if matrix_type != MatrixType.COO:
+            raise RuntimeError("AMDConjugateGradientSolver expects COO input")
+
+        self.n_verts = n_verts
+        self.rows = mi.UInt(rows.array)
+        self.cols = mi.UInt(cols.array)
+        self.data = mi.Float(data.array)
+        diag = dr.zeros(mi.Float, n_verts)
+        diag_entries = dr.select(self.rows == self.cols, self.data, 0.0)
+        dr.scatter_reduce(dr.ReduceOp.Add, diag, diag_entries, self.rows)
+        self.inv_diag = dr.rcp(diag)
+        self.max_iterations = 6
+
+    def matvec(self, x):
+        prod = dr.gather(mi.Point3f, x, self.cols) * self.data
+        y = dr.zeros(mi.Point3f, self.n_verts)
+        dr.scatter_reduce(dr.ReduceOp.Add, y, prod, self.rows)
+        return y
+
+    def solve(self, b, x=None):
+        b_v = dr.unravel(mi.Point3f, b.array)
+        x_v = dr.zeros(mi.Point3f, self.n_verts)
+        r = b_v
+        z = r * self.inv_diag
+        p = z
+        rz_old = dr.sum(dr.dot(r, z))
+
+        for _ in range(self.max_iterations):
+            ap = self.matvec(p)
+            denom = dr.sum(dr.dot(p, ap))
+            alpha = rz_old / dr.maximum(denom, 1e-20)
+            x_v = x_v + alpha * p
+            r = r - alpha * ap
+
+            z = r * self.inv_diag
+            rz_new = dr.sum(dr.dot(r, z))
+            p = z + (rz_new / dr.maximum(rz_old, 1e-20)) * p
+            rz_old = rz_new
+
+        return mi.TensorXf(dr.ravel(x_v), shape=b.shape)
 
 
 class LargeSteps():
@@ -118,7 +168,12 @@ class LargeSteps():
 
         dr.scatter_reduce(dr.ReduceOp.Add, data.array, mi.Float64(values), mi.UInt(inverse_idx))
 
-        self.solver = CholeskySolver(self.n_verts, self.rows, self.cols, data, MatrixType.COO)
+        if mi.variant().startswith('amd_'):
+            self.solver = AMDConjugateGradientSolver(
+                self.n_verts, self.rows, self.cols, data, MatrixType.COO)
+        else:
+            self.solver = CholeskySolver(
+                self.n_verts, self.rows, self.cols, data, MatrixType.COO)
         self.data = mi.TensorXf(data)
 
     def to_differential(self, v):

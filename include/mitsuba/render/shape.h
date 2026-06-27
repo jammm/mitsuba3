@@ -1015,18 +1015,18 @@ NAMESPACE_END(mitsuba)
     ray_intersect_preliminary_packet(                                                       \
         const Ray3fP##N &ray, ScalarIndex prim_index, MaskP##N active) const override {     \
         (void) ray; (void) prim_index; (void) active;                                       \
-        if constexpr (!dr::is_cuda_v<Float> && !dr::is_metal_v<Float>)                      \
+        if constexpr (!dr::is_cuda_v<Float> && !dr::is_metal_v<Float> && !dr::is_amd_v<Float>) \
             return ray_intersect_preliminary_impl<FloatP##N>(ray, prim_index, active);      \
         else                                                                                \
-            Throw("ray_intersect_preliminary_packet() CUDA/Metal not supported");           \
+            Throw("ray_intersect_preliminary_packet() GPU backends not supported");         \
     }                                                                                       \
     MaskP##N ray_test_packet(const Ray3fP##N &ray, ScalarIndex prim_index, MaskP##N active) \
         const override {                                                                    \
         (void) ray; (void) prim_index; (void) active;                                       \
-        if constexpr (!dr::is_cuda_v<Float> && !dr::is_metal_v<Float>)                      \
+        if constexpr (!dr::is_cuda_v<Float> && !dr::is_metal_v<Float> && !dr::is_amd_v<Float>) \
             return ray_test_impl<FloatP##N>(ray, prim_index, active);                       \
         else                                                                                \
-            Throw("ray_intersect_preliminary_packet() CUDA/Metal not supported");           \
+            Throw("ray_intersect_preliminary_packet() GPU backends not supported");         \
     }
 
 // Macro to define ray intersection methods given an *_impl() templated implementation

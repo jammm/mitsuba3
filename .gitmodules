@@ -49,3 +49,6 @@
 [submodule "ext/rgb2spec"]
 	path = ext/rgb2spec
 	url = https://github.com/mitsuba-renderer/rgb2spec
+[submodule "ext/hiprt"]
+	path = ext/hiprt
+	url = https://github.com/GPUOpen-LibrariesAndSDKs/HIPRT
