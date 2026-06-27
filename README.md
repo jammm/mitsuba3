@@ -1,3 +1,197 @@
+<!--
+    AMD/HIPRT port note
+
+    This branch carries an AMD GPU port of Mitsuba 3. Keep these build notes at
+    the top so humans and automation agents see the branch-specific workflow
+    before the upstream Mitsuba README below.
+-->
+
+# Mitsuba 3 AMD/HIPRT Port
+
+This branch is an AMD GPU port of Mitsuba 3. It adds `amd_*` and `amd_ad_*`
+variants backed by Dr.Jit's AMD/HIP backend and HIPRT ray tracing acceleration.
+Use the steps below to build the port from a fresh checkout on Windows with a
+ROCm SDK available through a Python virtual environment.
+
+## AMD Build Steps
+
+### 1. Clone and initialize submodules
+
+```powershell
+git clone --recursive -b jam/hip git@github.com:jammm/mitsuba3.git mitsuba3-amd
+Set-Location mitsuba3-amd
+git submodule update --init --recursive
+```
+
+For an existing checkout, update the branch and submodules to the recorded
+commits:
+
+```powershell
+git checkout jam/hip
+git pull --ff-only
+git submodule update --init --recursive
+```
+
+### 2. Activate the compiler and ROCm environment
+
+Run these commands from the repository root in PowerShell. The virtual
+environment must provide the `rocm-sdk` command.
+
+```powershell
+# Activate Visual Studio compiler environment.
+cmd /c '"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat" >nul 2>&1 && set' |
+  ForEach-Object {
+    if ($_ -match '^([^=]+)=(.*)$') {
+      [System.Environment]::SetEnvironmentVariable($matches[1], $matches[2], 'Process')
+    }
+  }
+
+# Locate and activate your Python virtual environment.
+# Adjust $Venv if your venv lives elsewhere.
+$Repo = (Get-Location).Path
+$Venv = Join-Path (Split-Path $Repo -Parent) "venv"
+. "$Venv\Scripts\Activate.ps1"
+
+# Locate ROCm from the active Python environment.
+$ROCM_ROOT = (rocm-sdk path --root).Trim()
+$ROCM_BIN = (rocm-sdk path --bin).Trim()
+$env:ROCM_HOME = $ROCM_ROOT
+$env:HIP_PATH = $ROCM_ROOT
+$env:PATH = "$ROCM_ROOT\lib\llvm\bin;$ROCM_BIN;$env:PATH"
+
+# Build Python extensions with the same compiler environment.
+$env:CC = "clang-cl"
+$env:CXX = "clang-cl"
+$env:DISTUTILS_USE_SDK = "1"
+```
+
+### 3. Build HIPRT once
+
+Mitsuba links against the HIPRT import library in
+`ext/hiprt/dist/bin/Release`. If that directory does not already contain
+`hiprt*64.lib`, build HIPRT first:
+
+```powershell
+$HiprtBuild = Join-Path $Repo "build\hiprt"
+cmake -S "$Repo\ext\hiprt" -B $HiprtBuild -G Ninja `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DHIP_PATH="$ROCM_ROOT" `
+  -DBITCODE=ON `
+  -DPRECOMPILE=ON `
+  -DNO_UNITTEST=ON `
+  -DFORCE_DISABLE_CUDA=ON
+
+cmake --build $HiprtBuild --config Release --parallel $env:NUMBER_OF_PROCESSORS
+
+# Preflight check expected by Mitsuba's AMD CMake path.
+Get-ChildItem "$Repo\ext\hiprt\dist\bin\Release\hiprt*64.lib"
+```
+
+### 4. Configure Mitsuba with AMD variants
+
+Use a fresh build directory, or delete `build\mitsuba_amd\mitsuba.conf` before
+changing `MI_DEFAULT_VARIANTS`. Mitsuba only uses `MI_DEFAULT_VARIANTS` when it
+creates a new `mitsuba.conf`.
+
+```powershell
+$Build = Join-Path $Repo "build\mitsuba_amd"
+cmake -S $Repo -B $Build -G Ninja `
+  -DCMAKE_BUILD_TYPE=Release `
+  -DMI_DEFAULT_VARIANTS="scalar_rgb,amd_rgb,amd_ad_rgb,amd_spectral,amd_ad_spectral" `
+  -DDRJIT_ENABLE_CUDA=OFF
+```
+
+The configure log should include lines similar to:
+
+```text
+Mitsuba: building the following variants:
+ * amd_rgb
+ * amd_ad_rgb
+Dr.Jit: building the AMD/HIP backend.
+Dr.Jit-Core: AMD/HIP GPU backend enabled.
+Mitsuba: using HIPRT for AMD GPU ray tracing.
+```
+
+### 5. Build Mitsuba
+
+```powershell
+cmake --build $Build --config Release --parallel $env:NUMBER_OF_PROCESSORS
+cmake --build $Build --config Release --parallel $env:NUMBER_OF_PROCESSORS --target copy-targets-drjit
+cmake --build $Build --config Release --parallel $env:NUMBER_OF_PROCESSORS --target copy-targets
+```
+
+### 6. Run an AMD smoke render
+
+Keep the ROCm and build outputs in `PATH` when running Python from the build
+tree.
+
+```powershell
+$env:PATH = "$Build\Release;$ROCM_ROOT\lib\llvm\bin;$ROCM_BIN;$env:PATH"
+$env:PYTHONPATH = "$Build\python;$Build\Release\python"
+$env:HIPRT_PATH = "$Repo\ext\hiprt"
+
+@'
+import drjit as dr
+import mitsuba as mi
+
+mi.set_variant("amd_rgb")
+print("variant", mi.variant())
+print("amd backend", dr.has_backend(dr.JitBackend.AMD))
+
+scene = mi.load_dict({
+    "type": "scene",
+    "integrator": { "type": "path" },
+    "sensor": {
+        "type": "perspective",
+        "film": { "type": "hdrfilm", "width": 8, "height": 8 },
+        "sampler": { "type": "independent", "sample_count": 1 },
+        "to_world": mi.ScalarTransform4f.look_at(
+            origin=[0, 0, 3], target=[0, 0, 0], up=[0, 1, 0])
+    },
+    "shape": {
+        "type": "rectangle",
+        "bsdf": {
+            "type": "diffuse",
+            "reflectance": { "type": "rgb", "value": [0.8, 0.2, 0.2] }
+        }
+    },
+    "emitter": { "type": "constant", "radiance": { "type": "rgb", "value": [1, 1, 1] } }
+})
+
+image = mi.render(scene)
+total = dr.sum(image.array)
+dr.eval(total)
+print("sum", total)
+'@ | python -
+```
+
+Expected result: the script prints `variant amd_rgb`, reports the AMD backend
+as available, and finishes with a finite image sum.
+
+### 7. Run tests
+
+For a broad Dr.Jit check, prefer a serial run first. Parallel `pytest-xdist`
+runs can put substantial pressure on GPU memory and Windows TDR.
+
+```powershell
+python -m pytest "$Repo\ext\drjit\tests" --tb=short -ra --timeout=300
+```
+
+Then run Mitsuba tests relevant to your change. Keep the same `PATH`,
+`PYTHONPATH`, `ROCM_HOME`, and `HIPRT_PATH` environment from the build step.
+
+### Common pitfalls
+
+- `MI_DEFAULT_VARIANTS` does not modify an existing `mitsuba.conf`; delete the
+  build directory or the generated config before reconfiguring variants.
+- `hiprt*64.lib` must exist below `ext/hiprt/dist/bin/Release` before Mitsuba
+  configures the AMD render backend.
+- The active Python environment must put `rocm-sdk` on `PATH`.
+- Keep `$ROCM_ROOT\lib\llvm\bin` and the ROCm SDK bin directory in `PATH` while
+  building and running tests.
+
+---
+
 <!-- <img src="https://github.com/mitsuba-renderer/mitsuba3/raw/master/docs/images/logo_plain.png" width="120" height="120" alt="Mitsuba logo"> -->
 
 <img src="https://raw.githubusercontent.com/mitsuba-renderer/mitsuba-data/master/docs/images/banners/banner_01.jpg"
